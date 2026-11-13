@@ -2,7 +2,7 @@
 Type=Application
 Name=Lorito
 Comment=Offline dictation pill
-Exec=@DIR@/target/release/lorito
+Exec="@DIR@/target/release/lorito"
 Icon=audio-input-microphone
 Categories=Utility;Accessibility;
 StartupWMClass=lorito
