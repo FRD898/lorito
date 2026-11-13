@@ -296,7 +296,10 @@ fn transcriber(model_dir: PathBuf, jobs: Receiver<PathBuf>, out: Sender<Result<S
     };
     let mut model = match ParakeetModel::load(&model_dir, &Quantization::Int8) {
         Ok(m) => m,
-        Err(e) => return send(Err(format!("model {}: {e}", model_dir.display()))),
+        Err(e) => {
+            drop(jobs); // close the channel before the UI can see the error and record again
+            return send(Err(format!("model {}: {e}", model_dir.display())));
+        }
     };
     send(Ok(String::new())); // model ready: an empty transcript moves Loading to Idle
     for wav in jobs {
