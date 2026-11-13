@@ -105,6 +105,16 @@ impl eframe::App for App {
         [0.0; 4]
     }
 
+    // Runs on every close (right-click or window manager). Not Drop: eframe may
+    // process::exit without dropping the app. Dropping a Child doesn't kill it
+    // either, so stop pw-record here or the mic stays open.
+    fn on_exit(&mut self, _: Option<&eframe::glow::Context>) {
+        if let State::Recording(child) = &mut self.state {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+    }
+
     fn update(&mut self, ctx: &egui::Context, _: &mut eframe::Frame) {
         while self.toggles.try_recv().is_ok() {
             self.toggle();
@@ -157,10 +167,6 @@ impl eframe::App for App {
             }
             // ponytail: no tray yet, right-click quits; move Quit to a tray menu once there are settings.
             if resp.secondary_clicked() {
-                // Dropping a Child doesn't kill it: stop pw-record or the mic stays open.
-                if let State::Recording(child) = &mut self.state {
-                    let _ = child.kill();
-                }
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
             }
             let p = ui.painter();
@@ -423,6 +429,16 @@ mod tests {
         drop(job_rx); // transcriber exited after a failed model load
         app.toggle();
         assert!(matches!(app.state, super::State::Error(_)));
+    }
+
+    #[test]
+    fn exit_stops_recorder() {
+        use eframe::App;
+        let child = std::process::Command::new("sleep").arg("10").spawn().unwrap();
+        let pid = child.id() as i32;
+        let (mut app, _jobs) = app(super::State::Recording(child));
+        app.on_exit(None);
+        assert_eq!(unsafe { libc::kill(pid, 0) }, -1, "recorder still running");
     }
 
     #[test]
