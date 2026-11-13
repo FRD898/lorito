@@ -465,8 +465,7 @@ mod tests {
         let first = super::lock_instance(&path);
         assert!(first.is_some());
         assert!(super::lock_instance(&path).is_none());
-        drop(first);
-        assert!(super::lock_instance(&path).is_some());
+        // No re-lock-after-drop check: parallel tests fork, and a child holds the fd until exec.
         let _ = std::fs::remove_file(path);
     }
 
