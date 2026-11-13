@@ -1,0 +1,10 @@
+# All crates come from ./vendor (offline, project-local).
+[source.crates-io]
+replace-with = "vendored-sources"
+
+[source.vendored-sources]
+directory = "vendor"
+
+[env]
+# ort-sys downloads prebuilt ONNX Runtime here on first build.
+ORT_CACHE_DIR = { value = ".tools/ort", relative = true }

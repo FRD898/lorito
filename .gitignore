@@ -1,0 +1,11 @@
+# Third-party binaries used for analysis only
+/source/
+# Project-local deps, regenerated per README
+/target/
+/vendor/
+/.tools/
+/models/
+/.portal-token
+# Local dev tooling (REA skill)
+/.claude/
+/.mcp.json
