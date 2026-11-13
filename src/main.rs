@@ -255,8 +255,12 @@ async fn paste_via_portal(texts: &Receiver<String>) -> ashpd::Result<()> {
         // ponytail: fixed delay; a very slow app could paste the restored content instead.
         tokio::time::sleep(std::time::Duration::from_millis(800)).await;
         for (primary, sel) in [false, true].into_iter().zip(saved) {
-            if let Some((mime, data)) = sel {
-                write_selection(primary, &mime, &data);
+            // None (empty, or unreadable): clear, the transcript is in there now either way.
+            match sel {
+                Some((mime, data)) => write_selection(primary, &mime, &data),
+                None => {
+                    let _ = wl("wl-copy", primary).arg("--clear").status();
+                }
             }
         }
     }
