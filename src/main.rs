@@ -319,6 +319,14 @@ fn transcribe(model: &mut ParakeetModel, wav: &Path) -> Result<String, String> {
     Ok(result.text.trim().to_string())
 }
 
+/// Exclusive lock for the single running instance; None if another one holds it.
+// Not a socket probe: any connection to lorito.sock counts as a toggle.
+fn lock_instance(path: &Path) -> Option<std::fs::File> {
+    use std::os::fd::AsRawFd;
+    let f = std::fs::File::create(path).ok()?;
+    (unsafe { libc::flock(f.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } == 0).then_some(f)
+}
+
 fn main() -> eframe::Result {
     let sock = runtime_path("lorito.sock");
 
@@ -328,6 +336,12 @@ fn main() -> eframe::Result {
         UnixStream::connect(&sock).expect("lorito is not running");
         return Ok(());
     }
+
+    // Held until exit; the socket and lorito.wav belong to whoever holds it.
+    let Some(_lock) = lock_instance(&runtime_path("lorito.lock")) else {
+        eprintln!("lorito is already running");
+        return Ok(());
+    };
 
     let model = std::env::var_os("LORITO_MODEL").map_or_else(|| DEFAULT_MODEL.into(), PathBuf::from);
 
@@ -439,6 +453,17 @@ mod tests {
         let (mut app, _jobs) = app(super::State::Recording(child));
         app.on_exit(None);
         assert_eq!(unsafe { libc::kill(pid, 0) }, -1, "recorder still running");
+    }
+
+    #[test]
+    fn second_instance_is_refused() {
+        let path = std::env::temp_dir().join(format!("lorito-test-{}.lock", std::process::id()));
+        let first = super::lock_instance(&path);
+        assert!(first.is_some());
+        assert!(super::lock_instance(&path).is_none());
+        drop(first);
+        assert!(super::lock_instance(&path).is_some());
+        let _ = std::fs::remove_file(path);
     }
 
     #[test]
