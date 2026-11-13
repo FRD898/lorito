@@ -89,8 +89,11 @@ impl App {
                 // SIGINT lets pw-record finalize the WAV header.
                 unsafe { libc::kill(child.id() as i32, libc::SIGINT) };
                 let _ = child.wait();
-                self.jobs.send(self.wav.clone()).unwrap();
-                State::Transcribing
+                // The transcriber thread exits if the model failed to load.
+                match self.jobs.send(self.wav.clone()) {
+                    Ok(()) => State::Transcribing,
+                    Err(_) => State::Error("transcriber not running (model failed to load)".into()),
+                }
             }
             busy => busy, // Loading / Transcribing: ignore clicks
         };
@@ -388,6 +391,35 @@ mod tests {
         let quiet: Vec<u8> = (0..800).flat_map(|i| (if i % 2 == 0 { 300i16 } else { -300 }).to_le_bytes()).collect();
         let q = super::rms_level(&quiet);
         assert!(q > 0.1 && q < 0.5, "{q}");
+    }
+
+    fn app(state: super::State) -> (super::App, std::sync::mpsc::Receiver<std::path::PathBuf>) {
+        use std::sync::mpsc::channel;
+        let (jobs, job_rx) = channel();
+        let (_, results) = channel();
+        let (_, toggles) = channel();
+        let (paste, _) = channel();
+        let app = super::App {
+            state,
+            last_text: String::new(),
+            jobs,
+            results,
+            toggles,
+            paste,
+            wav: "/nonexistent.wav".into(),
+            levels: [0.0; super::BARS],
+            last_sample: 0.0,
+        };
+        (app, job_rx)
+    }
+
+    #[test]
+    fn stop_without_transcriber_is_error_not_panic() {
+        let child = std::process::Command::new("sleep").arg("10").spawn().unwrap();
+        let (mut app, job_rx) = app(super::State::Recording(child));
+        drop(job_rx); // transcriber exited after a failed model load
+        app.toggle();
+        assert!(matches!(app.state, super::State::Error(_)));
     }
 
     #[test]
